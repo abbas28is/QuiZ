@@ -1,28 +1,45 @@
-const db = require('../database');
-
 async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
-  const verifiedQuestions = [];
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  
+  if (!apiKey) {
+    console.error("GEMINI_API_KEY is missing!");
+    return [];
+  }
 
-  // نص التوجيه لإنشاء أسئلة بدون خيارات (سؤال وجواب فقط)
-  const promptText = `أنت خبير كويزات ومحقق معلومات.
-قم بإنشاء ${amount} أسئلة مختلفة وجديدة تماماً في مجال "${category}".
-مستوى الصعوبة المطلوبة بالضبط هو: ${difficultyPct}% (حيث 20% سهل، 100% متوسط، 300% صعبة جداً، 500%+ أسئلة متخصصة ومعقدة جداً).
+  // تحديد وصف الصعوبة بشكل صريح ومباشر للذكاء الاصطناعي
+  let difficultyGuide = "أسئلة عامة وسهلة جداً ومباشرة يسهل إجابتها.";
+  if (difficultyPct > 30 && difficultyPct <= 70) {
+    difficultyGuide = "أسئلة متوسطة تحتاج معرفة جيدة وحضور ذهن.";
+  } else if (difficultyPct > 70 && difficultyPct <= 150) {
+    difficultyGuide = "أسئلة صعبة جداً ومتقدمة للمتخصصين في المجال.";
+  } else if (difficultyPct > 150) {
+    difficultyGuide = "أسئلة معقدة ودقيقة جداً ونادرة، مستواها شبه تعجيزي وللمحترفين فقط.";
+  }
 
-الشروط المهمة:
-1. يمنع التكرار، أنشئ أسئلة جديدة تناسب مستوى الصعوبة ${difficultyPct}%.
-2. لا تضع أي خيارات (Options)، فقط سؤال وإجابته المباشرة والشرح.
+  // استخدام Random Seed لضمان عدم تكرار الأسئلة نهائياً
+  const randomSeed = Math.floor(Math.random() * 1000000);
 
-أرجع النتيجة بصيغة JSON Array حصرية فقط، بنفس هذا الهيكل تماماً:
+  const promptText = `
+أنت خبير واضع اختبارات وتحديات دقيقة جداً.
+المطلوب: إنشاء ${amount} أسئلة حقيقية ومتنوعة وجديدة تماماً.
+- المجال: "${category}"
+- نسبة الصعوبة المطلوبة: ${difficultyPct}% (${difficultyGuide})
+- كود التنوع العشوائي: ${randomSeed}
+
+شروط صارمة:
+1. عدم تكرار أي سؤال سابق.
+2. لا تضع أي خيارات متعددة (No Options).
+3. أرجع فقط السؤال والإجابة الصحيحة والشرح.
+
+أرجع الرد بصيغة JSON Array حصرية فقط وبدون أي كود تشفير أو كلام إضافي:
 [
   {
-    "question": "نص السؤال هنا؟",
-    "correct_answer": "الإجابة المباشرة والدقيقة",
-    "explanation": "الشرح التوضيحي للمعلومة",
-    "source_url": "اسم المصدر أو المرجع العلمي",
-    "confidence_score": 0.98
+    "question": "نص السؤال الدقيق وفق مستوى الصعوبة",
+    "correct_answer": "الإجابة الصحيحة المباشرة",
+    "explanation": "الشرح أو المصدر التوضيحي"
   }
-]`;
+]
+`;
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
@@ -34,7 +51,7 @@ async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
         contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
           responseMimeType: "application/json",
-          temperature: 0.9 // لضمان تنوع الأسئلة وعدم تكرارها
+          temperature: 1.0 // أقصى درجات التنوع للذكاء الاصطناعي
         }
       })
     });
@@ -47,64 +64,23 @@ async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
       const parsed = JSON.parse(cleanText);
 
       if (Array.isArray(parsed)) {
-        for (const q of parsed) {
-          q.category = category;
-          q.difficulty_pct = difficultyPct;
-          q.options = []; // إخفاء الخيارات
-          
-          if (q.question && q.correct_answer) {
-            try { db.saveVerifiedQuestion(q); } catch (e) {}
-            verifiedQuestions.push(q);
-          }
-        }
+        return parsed.map(q => ({
+          category: category,
+          difficulty_pct: difficultyPct,
+          question: q.question,
+          correct_answer: q.correct_answer,
+          explanation: q.explanation || "معلومة موثوقة.",
+          options: [] // إلغاء الخيارات تماماً
+        }));
       }
     } else {
-      console.error("Gemini Response Error:", JSON.stringify(data));
+      console.error("Gemini Error Payload:", JSON.stringify(data));
     }
   } catch (err) {
-    console.error("Fetch API Error:", err.message);
+    console.error("Generation Error:", err.message);
   }
 
-  return verifiedQuestions;
-}
-
-module.exports = { generateValidatedQuestions };
-      confidence_score: 1.0
-    },
-    {
-      question: "كم مدة الشوط الواحد في مباراة كرة القدم الرسمية؟",
-      options: ["45 دقيقة", "40 دقيقة", "50 دقيقة", "30 دقيقة"],
-      correct_answer: "45 دقيقة",
-      explanation: "المباراة تلعب على شوطين مدة كل شوط 45 دقيقة.",
-      source_url: "FIFA",
-      confidence_score: 1.0
-    },
-    {
-      question: "من هو اللاعب الملقب بـ (البرغوث)؟",
-      options: ["ليونيل ميسي", "كريستيانو رونالدو", "نيمار داسيلفا", "كيليان مبابي"],
-      correct_answer: "ليونيل ميسي",
-      explanation: "يطلق لقب البرغوث (La Pulga) على الأسطورة ليونيل ميسي.",
-      source_url: "Sports Press",
-      confidence_score: 1.0
-    },
-    {
-      question: "أي دولة استضافت كأس العالم لكرة القدم عام 2022؟",
-      options: ["قطر", "البرازيل", "فرنسا", "روسيا"],
-      correct_answer: "قطر",
-      explanation: "أقيمت بطولة كأس العالم 2022 في دولة قطر.",
-      source_url: "FIFA World Cup 2022",
-      confidence_score: 1.0
-    }
-  ];
-
-  const result = [];
-  for (let i = 0; i < count; i++) {
-    const item = { ...list[i % list.length] };
-    item.category = category;
-    item.difficulty_pct = difficultyPct;
-    result.push(item);
-  }
-  return result;
+  return [];
 }
 
 module.exports = { generateValidatedQuestions };
