@@ -2,39 +2,25 @@ const db = require('../database');
 
 async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
   const verifiedQuestions = [];
-
-  // 1. فحص الكاش أولاً
-  try {
-    const cached = db.getVerifiedQuestions(category, difficultyPct, amount);
-    if (cached && cached.length >= amount) {
-      return cached.slice(0, amount);
-    }
-    if (cached && cached.length > 0) {
-      verifiedQuestions.push(...cached);
-    }
-  } catch (err) {
-    console.error("Cache fetch error:", err.message);
-  }
-
-  const needed = amount - verifiedQuestions.length;
-  if (needed <= 0) return verifiedQuestions.slice(0, amount);
-
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
-  if (!apiKey) {
-    console.error("GEMINI_API_KEY is missing in Environment Variables!");
-    return getFallbackQuestions(category, difficultyPct, needed);
-  }
 
-  const promptText = `أنت خبير كويزات متخصص. قم بإنشاء ${needed} أسئلة حقيقية ودقيقة في مجال "${category}" بمستوى صعوبة ${difficultyPct}%.
-يجب أن ترجع النتيجة بصيغة JSON Array فقط وبدون أي نص آخر قبل أو بعد:
+  // نص التوجيه لإنشاء أسئلة بدون خيارات (سؤال وجواب فقط)
+  const promptText = `أنت خبير كويزات ومحقق معلومات.
+قم بإنشاء ${amount} أسئلة مختلفة وجديدة تماماً في مجال "${category}".
+مستوى الصعوبة المطلوبة بالضبط هو: ${difficultyPct}% (حيث 20% سهل، 100% متوسط، 300% صعبة جداً، 500%+ أسئلة متخصصة ومعقدة جداً).
+
+الشروط المهمة:
+1. يمنع التكرار، أنشئ أسئلة جديدة تناسب مستوى الصعوبة ${difficultyPct}%.
+2. لا تضع أي خيارات (Options)، فقط سؤال وإجابته المباشرة والشرح.
+
+أرجع النتيجة بصيغة JSON Array حصرية فقط، بنفس هذا الهيكل تماماً:
 [
   {
-    "question": "نص السؤال الدقيق هنا",
-    "options": ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"],
-    "correct_answer": "الخيار الأول",
-    "explanation": "شرح الإجابة",
-    "source_url": "اسم المصدر",
-    "confidence_score": 0.95
+    "question": "نص السؤال هنا؟",
+    "correct_answer": "الإجابة المباشرة والدقيقة",
+    "explanation": "الشرح التوضيحي للمعلومة",
+    "source_url": "اسم المصدر أو المرجع العلمي",
+    "confidence_score": 0.98
   }
 ]`;
 
@@ -47,7 +33,8 @@ async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
       body: JSON.stringify({
         contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          temperature: 0.9 // لضمان تنوع الأسئلة وعدم تكرارها
         }
       })
     });
@@ -63,45 +50,25 @@ async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
         for (const q of parsed) {
           q.category = category;
           q.difficulty_pct = difficultyPct;
-          if (q.question && Array.isArray(q.options) && q.options.length === 4 && q.correct_answer) {
+          q.options = []; // إخفاء الخيارات
+          
+          if (q.question && q.correct_answer) {
             try { db.saveVerifiedQuestion(q); } catch (e) {}
             verifiedQuestions.push(q);
           }
         }
       }
     } else {
-      console.error("Gemini API Error Response:", JSON.stringify(data));
+      console.error("Gemini Response Error:", JSON.stringify(data));
     }
   } catch (err) {
     console.error("Fetch API Error:", err.message);
   }
 
-  // إذا لم يرجع الذكاء الاصطناعي أسئلة كافية، يتم تزويد الباقي بأسئلة رياضية/عامة واقعية
-  if (verifiedQuestions.length < amount) {
-    const extraNeeded = amount - verifiedQuestions.length;
-    const fallbacks = getFallbackQuestions(category, difficultyPct, extraNeeded);
-    verifiedQuestions.push(...fallbacks);
-  }
-
-  return verifiedQuestions.slice(0, amount);
+  return verifiedQuestions;
 }
 
-function getFallbackQuestions(category, difficultyPct, count) {
-  const list = [
-    {
-      question: "ما هو الفريق الأكثر فوزاً بدوري أبطال أوروبا؟",
-      options: ["ريال مدريد", "إيه سي ميلان", "بايرن ميونخ", "برشلونة"],
-      correct_answer: "ريال مدريد",
-      explanation: "حقق ريال مدريد الرقم القياسي بالفوز بالبطولة.",
-      source_url: "UEFA",
-      confidence_score: 1.0
-    },
-    {
-      question: "كم عدد اللاعبين في فريق كرة القدم داخل الملعب؟",
-      options: ["11 لاعب", "10 لاعبين", "12 لاعب", "9 لاعبين"],
-      correct_answer: "11 لاعب",
-      explanation: "يتكون كل فريق أساسي من 11 لاعباً مع حارس المرمى.",
-      source_url: "FIFA Rules",
+module.exports = { generateValidatedQuestions };
       confidence_score: 1.0
     },
     {
