@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Quiz Challenge Bot</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans antialiased">
+
+  <div id="app" class="max-w-md mx-auto p-4 min-h-screen flex flex-col justify-between">
+    
+    <div id="screen-config" class="space-y-6">
+      <header class="text-center py-4">
+        <h1 class="text-2xl font-bold text-blue-400">⚡ صانع التحديات الذكي</h1>
+        <p class="text-xs text-slate-400 mt-1">أسئلة موثقة ودقيقة بنسبة 100%</p>
+      </header>
+
+      <div>
+        <label class="block text-sm font-semibold mb-2">اختر قسم التحدي:</label>
+        <select id="category-select" onchange="toggleCustomCategory()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+          <option value="كرة القدم">⚽ كرة القدم</option>
+          <option value="التاريخ">📜 التاريخ</option>
+          <option value="الجغرافيا">🌍 الجغرافيا</option>
+          <option value="العلوم">🔬 العلوم</option>
+          <option value="التكنولوجيا">💻 التكنولوجيا</option>
+          <option value="الأفلام والمسلسلات">🎬 الأفلام والمسلسلات</option>
+          <option value="الثقافة العامة">🧠 الثقافة العامة</option>
+          <option value="الرياضة">🏆 الرياضة</option>
+          <option value="الأدب">📚 الأدب</option>
+          <option value="آخر">✏️ موضوع آخر مخصص...</option>
+        </select>
+        <input id="custom-category" type="text" placeholder="اكتب الموضوع الذي تريده بالتفصيل..." class="hidden mt-2 w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold mb-2">عدد الأسئلة (5 - 100):</label>
+        <input id="amount-input" type="number" value="5" min="5" max="100" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+      </div>
+
+      <div>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-sm font-semibold">مستوى الصعوبة الحقيقي:</label>
+          <span id="difficulty-val" class="text-blue-400 font-bold">100%</span>
+        </div>
+        <input id="difficulty-slider" type="range" min="20" max="1000" step="10" value="100" oninput="updateDifficultyLabel(this.value)" class="w-full accent-blue-500 cursor-pointer">
+        <p id="difficulty-desc" class="text-xs text-slate-400 mt-1">أسئلة صعبة للمحترفين والمتخصصين</p>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold mb-2">طريقة عرض الإجابات:</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="mode-immediate" onclick="setMode('IMMEDIATE')" class="p-3 text-xs rounded-lg border border-blue-500 bg-blue-500/10 font-bold">إظهار الإجابة بعد كل سؤال</button>
+          <button id="mode-atend" onclick="setMode('AT_END')" class="p-3 text-xs rounded-lg border border-slate-700 bg-slate-800 text-slate-400">عرض جميع الإجابات بالنهاية</button>
+        </div>
+      </div>
+
+      <button onclick="startQuiz()" class="w-full bg-blue-600 hover:bg-blue-500 font-bold py-3.5 rounded-xl transition shadow-lg text-center mt-4">
+        إنشاء التحدي الآن ✨
+      </button>
+    </div>
+
+    <div id="screen-loading" class="hidden flex flex-col items-center justify-center my-auto space-y-4">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <p class="text-sm font-medium text-slate-300">جاري توليد الأسئلة وتدقيق صحتها من المصادر الموثوقة...</p>
+    </div>
+
+    <div id="screen-play" class="hidden space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <span id="quiz-progress" class="text-xs font-bold text-blue-400">السؤال 1 / 5</span>
+        <span id="quiz-timer" class="text-xs bg-slate-800 px-2.5 py-1 rounded-full">⏱️ 00:00</span>
+      </div>
+
+      <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+        <h2 id="question-text" class="text-base font-bold leading-relaxed mb-4">...</h2>
+        <div id="options-container" class="space-y-2"></div>
+      </div>
+
+      <button id="next-btn" onclick="nextQuestion()" class="hidden w-full bg-blue-600 font-bold py-3 rounded-lg">السؤال التالي ➡️</button>
+    </div>
+
+    <div id="screen-results" class="hidden space-y-6 my-auto">
+      <div class="text-center space-y-2">
+        <h2 class="text-xl font-bold">اكتمل التحدي! 🎉</h2>
+        <div id="final-score" class="text-4xl font-extrabold text-blue-400">0%</div>
+        <p id="final-rating" class="text-sm text-slate-300">تقييم الأداء: -</p>
+      </div>
+
+      <div id="results-details" class="space-y-3 max-h-80 overflow-y-auto pr-1"></div>
+
+      <button onclick="location.reload()" class="w-full bg-slate-800 border border-slate-700 font-bold py-3 rounded-lg">إعادة تحدي جديد 🔄</button>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
