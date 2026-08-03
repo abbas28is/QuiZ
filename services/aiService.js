@@ -2,7 +2,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ValidationService = require('./validationService');
 const db = require('../database');
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
   const verifiedQuestions = [];
