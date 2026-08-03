@@ -2,41 +2,39 @@ async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
   
   if (!apiKey) {
-    console.error("GEMINI_API_KEY is missing!");
+    console.error("GEMINI_API_KEY Missing!");
     return [];
   }
 
-  // تحديد وصف الصعوبة بشكل صريح ومباشر للذكاء الاصطناعي
-  let difficultyGuide = "أسئلة عامة وسهلة جداً ومباشرة يسهل إجابتها.";
-  if (difficultyPct > 30 && difficultyPct <= 70) {
-    difficultyGuide = "أسئلة متوسطة تحتاج معرفة جيدة وحضور ذهن.";
-  } else if (difficultyPct > 70 && difficultyPct <= 150) {
-    difficultyGuide = "أسئلة صعبة جداً ومتقدمة للمتخصصين في المجال.";
-  } else if (difficultyPct > 150) {
-    difficultyGuide = "أسئلة معقدة ودقيقة جداً ونادرة، مستواها شبه تعجيزي وللمحترفين فقط.";
+  // ضبط وصف مستوى الصعوبة الدقيق
+  let difficultyContext = "أسئلة بسيطة ومباشرة جداً للمبتدئين.";
+  if (difficultyPct > 30 && difficultyPct <= 80) {
+    difficultyContext = "أسئلة متوسطة الصعوبة تحتاج معرفة جيدة.";
+  } else if (difficultyPct > 80 && difficultyPct <= 200) {
+    difficultyContext = "أسئلة صعبة جداً وعميقة للمتخصصين فقط.";
+  } else if (difficultyPct > 200) {
+    difficultyContext = "أسئلة معقدة ونادرة للغاية، تعجيزية ولا يعرفها إلا قلة من الخبراء.";
   }
 
-  // استخدام Random Seed لضمان عدم تكرار الأسئلة نهائياً
-  const randomSeed = Math.floor(Math.random() * 1000000);
+  const randomSeed = Math.floor(Math.random() * 9999999);
 
   const promptText = `
-أنت خبير واضع اختبارات وتحديات دقيقة جداً.
-المطلوب: إنشاء ${amount} أسئلة حقيقية ومتنوعة وجديدة تماماً.
-- المجال: "${category}"
-- نسبة الصعوبة المطلوبة: ${difficultyPct}% (${difficultyGuide})
-- كود التنوع العشوائي: ${randomSeed}
+أنت خبير كويزات ومحتوى تعليمي.
+قم بإنشاء ${amount} أسئلة حقيقية وفريدة في مجال: "${category}".
+نسبة الصعوبة المطلوبة: ${difficultyPct}% (${difficultyContext}).
+رمز التنوع العشوائي: ${randomSeed}
 
-شروط صارمة:
-1. عدم تكرار أي سؤال سابق.
-2. لا تضع أي خيارات متعددة (No Options).
-3. أرجع فقط السؤال والإجابة الصحيحة والشرح.
+شروط صارمة جداً:
+1. يمنع وضع أي خيارات متعددة (No Options/Choices).
+2. قم بإرجاع السؤال، والإجابة الصحيحة المباشرة، والشرح فقط.
+3. التزم بمستوى الصعوبة المحدد (${difficultyPct}%).
 
-أرجع الرد بصيغة JSON Array حصرية فقط وبدون أي كود تشفير أو كلام إضافي:
+أرجِع الناتج بصيغة JSON Array فقط وحصرياً كالتالي:
 [
   {
-    "question": "نص السؤال الدقيق وفق مستوى الصعوبة",
+    "question": "نص السؤال الدقيق؟",
     "correct_answer": "الإجابة الصحيحة المباشرة",
-    "explanation": "الشرح أو المصدر التوضيحي"
+    "explanation": "الشرح التوضيحي والمصدر"
   }
 ]
 `;
@@ -51,7 +49,7 @@ async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
         contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
           responseMimeType: "application/json",
-          temperature: 1.0 // أقصى درجات التنوع للذكاء الاصطناعي
+          temperature: 1.0
         }
       })
     });
@@ -69,15 +67,13 @@ async function generateValidatedQuestions(category, difficultyPct, amount = 5) {
           difficulty_pct: difficultyPct,
           question: q.question,
           correct_answer: q.correct_answer,
-          explanation: q.explanation || "معلومة موثوقة.",
-          options: [] // إلغاء الخيارات تماماً
+          explanation: q.explanation || "",
+          options: [] // تصفير الخيارات نهائياً
         }));
       }
-    } else {
-      console.error("Gemini Error Payload:", JSON.stringify(data));
     }
   } catch (err) {
-    console.error("Generation Error:", err.message);
+    console.error("AI Generation Error:", err.message);
   }
 
   return [];
